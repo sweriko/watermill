@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Continuous Vertical Scrolling Feed with Enhanced Strobe Effect</title>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            background-color: #f0f0f0;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: transparent;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Increased canvas height to 800px -->
+    <canvas id="feedCanvas" width="300" height="700"></canvas>
+
+    <script>
+        const canvas = document.getElementById('feedCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const IMAGE_PATHS = [
+            'rectangles/01.png',
+            'rectangles/02.png',
+            'rectangles/03.png',
+            'rectangles/04.png',
+            'rectangles/05.png',
+            'rectangles/06.png',
+            'rectangles/07.png',
+            'rectangles/08.png'
+        ];
+        const IMAGE_WIDTH = 256;
+        const IMAGE_HEIGHT = 128;
+        const RECT_SPACING = 5; // You can adjust this if needed
+        const SPEED = 1; // Pixels per frame
+        const MARKING_LINE_POSITION = canvas.height - 90; // Adjust as needed
+
+        let images = [];
+        let imageElements = [];
+
+        // Increased TOTAL_IMAGE_COUNT from 7 to 9
+        const TOTAL_IMAGE_COUNT = 9; // Including those fading in/out
+
+        // Duration for the strobe effect in milliseconds
+        const STROBE_DURATION = 700;
+        // Frequency of the strobe (times per second)
+        const STROBE_FREQUENCY = 20; // Increased to 20 Hz for faster alternation
+
+        // Opacity settings
+        const STROBE_OPACITY = 0.5; // Lower opacity for strobe
+        const FINAL_OPACITY = 0.8; // Final overlay opacity after strobe
+
+        /**
+         * Creates an image instance with initial properties.
+         * @param {number} y - The vertical position of the image.
+         * @param {number} imageIndex - The index of the image in IMAGE_PATHS.
+         * @returns {object} The image instance.
+         */
+        function createImageInstance(y, imageIndex) {
+            return {
+                imageIndex,
+                y,
+                opacity: 1,
+                overlay: null, // Will hold the current overlay color
+                overlayStartTime: null, // Timestamp when overlay started
+                isStrobing: false, // Flag indicating if strobe is active
+                finalColor: null // Stores the final color after strobe
+            };
+        }
+
+        /**
+         * Initializes the images array with instances positioned off-screen.
+         */
+        function initImages() {
+            // Calculate the starting Y position based on TOTAL_IMAGE_COUNT
+            const startY = -(IMAGE_HEIGHT + RECT_SPACING) * (TOTAL_IMAGE_COUNT - 1);
+            for (let i = TOTAL_IMAGE_COUNT - 1; i >= 0; i--) {
+                const imageIndex = i % IMAGE_PATHS.length; // Cycle through images
+                images.push(createImageInstance(startY + i * (IMAGE_HEIGHT + RECT_SPACING), imageIndex));
+            }
+        }
+
+        /**
+         * Updates the position and overlay states of each image.
+         */
+        function updateImages() {
+            const currentTime = performance.now();
+
+            for (const img of images) {
+                img.y += SPEED;
+
+                // Add strobe overlay when the rectangle crosses the marking line
+                if (!img.isStrobing && img.y + IMAGE_HEIGHT >= MARKING_LINE_POSITION) {
+                    img.isStrobing = true;
+                    img.overlayStartTime = currentTime;
+                    img.overlay = 'rgba(255, 0, 0, 1)'; // Start with red
+                }
+
+                // Handle strobe effect
+                if (img.isStrobing && !img.finalColor) {
+                    const elapsed = currentTime - img.overlayStartTime;
+
+                    if (elapsed < STROBE_DURATION) {
+                        // Calculate the current phase based on strobe frequency
+                        const elapsedSeconds = elapsed / 1000;
+                        const phase = Math.floor(elapsedSeconds * STROBE_FREQUENCY) % 2;
+
+                        // Alternate between red and green with lower opacity
+                        if (phase === 0) {
+                            img.overlay = `rgba(255, 0, 0, ${STROBE_OPACITY})`; // Red with lower opacity
+                        } else {
+                            img.overlay = `rgba(0, 255, 0, ${STROBE_OPACITY})`; // Green with lower opacity
+                        }
+                    } else if (!img.finalColor) {
+                        // After strobe duration, choose a final color randomly
+                        const isGreenFinal = Math.random() > 0.5;
+                        img.finalColor = isGreenFinal ? `rgba(0, 255, 0, ${FINAL_OPACITY})` : `rgba(255, 0, 0, ${FINAL_OPACITY})`;
+                        img.overlay = img.finalColor; // Set to final color
+                    }
+                }
+
+                // Fade in/out logic based on position
+                const canvasHeight = canvas.height;
+                if (img.y < IMAGE_HEIGHT) {
+                    img.opacity = Math.max(0, img.y / IMAGE_HEIGHT);
+                } else if (img.y > canvasHeight - IMAGE_HEIGHT) {
+                    img.opacity = Math.max(0, (canvasHeight - img.y) / IMAGE_HEIGHT);
+                } else {
+                    img.opacity = 1;
+                }
+            }
+
+            // Remove images that have fully exited and add new ones
+            if (images.length > 0 && images[0].y > canvas.height) {
+                const lastImage = images[images.length - 1];
+                const newImageIndex = (lastImage.imageIndex + 1) % IMAGE_PATHS.length;
+                images.shift();
+                images.push(createImageInstance(lastImage.y - IMAGE_HEIGHT - RECT_SPACING, newImageIndex));
+            }
+        }
+
+        /**
+         * Draws all images and their overlays onto the canvas.
+         */
+        function drawImages() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw marking line (commented out to make it invisible)
+            /*
+            ctx.strokeStyle = "rgba(0,0,0,0.2)";
+            ctx.beginPath();
+            ctx.moveTo(0, MARKING_LINE_POSITION);
+            ctx.lineTo(canvas.width, MARKING_LINE_POSITION);
+            ctx.stroke();
+            */
+
+            for (const img of images) {
+                ctx.globalAlpha = img.opacity;
+                ctx.drawImage(
+                    imageElements[img.imageIndex],
+                    (canvas.width - IMAGE_WIDTH) / 2,
+                    img.y,
+                    IMAGE_WIDTH,
+                    IMAGE_HEIGHT
+                );
+
+                // Draw overlay if present
+                if (img.overlay) {
+                    ctx.fillStyle = img.overlay;
+                    ctx.fillRect(
+                        (canvas.width - IMAGE_WIDTH) / 2,
+                        img.y,
+                        IMAGE_WIDTH,
+                        IMAGE_HEIGHT
+                    );
+                }
+            }
+
+            ctx.globalAlpha = 1; // Reset alpha
+        }
+
+        /**
+         * The main animation loop.
+         */
+        function animate() {
+            updateImages();
+            drawImages();
+            requestAnimationFrame(animate);
+        }
+
+        /**
+         * Loads all images and starts the animation once all are loaded.
+         */
+        function preloadImages() {
+            let loadedCount = 0;
+            const totalImages = IMAGE_PATHS.length;
+
+            IMAGE_PATHS.forEach((path, index) => {
+                const img = new Image();
+                img.src = path;
+                img.onload = () => {
+                    loadedCount++;
+                    if (loadedCount === totalImages) {
+                        initImages();
+                        animate();
+                    }
+                };
+                img.onerror = () => {
+                    console.error(`Failed to load image: ${path}`);
+                    loadedCount++;
+                    if (loadedCount === totalImages) {
+                        initImages();
+                        animate();
+                    }
+                };
+                imageElements[index] = img;
+            });
+        }
+
+        // Start preloading images
+        preloadImages();
+    </script>
+</body>
+</html>
